@@ -1,0 +1,64 @@
+rooms:
+  dining_room:
+    corners:
+      - [245, 110]          # top-left
+      - [296, 110]          # top-right
+      - [296, 209]          # bottom-right
+      - [245, 209]          # bottom-left
+    entry_point: [271, 115] # Map coordinates
+    mesh_resolution: 5      # Pixels
+    inflation_radius: 3     # Pixel
+  kitchen:
+    corners:
+      - [195, 0]          # top-left
+      - [296, 0]          # top-right
+      - [296, 109]          # bottom-right
+      - [195, 109]          # bottom-left
+    entry_point: [245, 85] # Map coordinates
+    mesh_resolution: 5      # Pixels
+    inflation_radius: 3     # Pixel
+  pantry:
+    corners:
+      - [148, 0]          # top-left
+      - [193, 0]          # top-right
+      - [193, 86]          # bottom-right
+      - [148, 86]          # bottom-left
+    entry_point: [192, 13] # Map coordinates
+    mesh_resolution: 5      # Pixels
+    inflation_radius: 3     # Pixel
+  hallway:
+    corners:
+      - [148, 87]          # top-left
+      - [193, 87]          # top-right
+      - [193, 108]          # bottom-right
+      - [148, 108]          # bottom-left
+    entry_point: [170, 98]  # Map coordinates
+    mesh_resolution: 5      # Pixels
+    inflation_radius: 3     # Pixel
+  living_room:
+    corners:
+      - [47, 0]          # top-left
+      - [147, 0]          # top-right
+      - [147, 108]          # bottom-right
+      - [47, 108]          # bottom-left
+    entry_point: [96, 88]   # Map coordinates 
+    mesh_resolution: 5     # Pixels
+    inflation_radius: 3     # Pixel
+  library:
+    corners:
+      - [0, 0]          # top-left
+      - [46, 0]          # top-right
+      - [46, 85]          # bottom-right
+      - [0, 85]          # bottom-left
+    entry_point: [40, 40] # Map coordinates
+    mesh_resolution: 5     # Pixels
+    inflation_radius: 3     # Pixels 
+  bedroom:
+    corners:
+      - [0, 86]          # top-left
+      - [46, 86]          # top-right
+      - [46, 182]          # bottom-right
+      - [0, 182]          # bottom-left
+    entry_point: [22, 88] # Map coordinates
+    mesh_resolution: 5     # Pixels
+    inflation_radius: 3     # Pixels          

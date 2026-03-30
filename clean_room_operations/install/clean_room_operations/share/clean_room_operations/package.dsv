@@ -1,0 +1,9 @@
+source;share/clean_room_operations/hook/pythonpath.ps1
+source;share/clean_room_operations/hook/pythonpath.dsv
+source;share/clean_room_operations/hook/pythonpath.sh
+source;share/clean_room_operations/hook/ament_prefix_path.ps1
+source;share/clean_room_operations/hook/ament_prefix_path.dsv
+source;share/clean_room_operations/hook/ament_prefix_path.sh
+source;../../build/clean_room_operations/share/clean_room_operations/hook/pythonpath_develop.ps1
+source;../../build/clean_room_operations/share/clean_room_operations/hook/pythonpath_develop.dsv
+source;../../build/clean_room_operations/share/clean_room_operations/hook/pythonpath_develop.sh
