@@ -69,8 +69,8 @@ class CleaningManager:
         if pose is None:
             return 0
 
-        px = pose.position.x
-        py = pose.position.y
+        px = pose.pose.position.x
+        py = pose.pose.position.y
 
         dists = [(i, (wx - px)**2 + (wy - py)**2)
                  for i, (wx, wy) in enumerate(waypoints)]

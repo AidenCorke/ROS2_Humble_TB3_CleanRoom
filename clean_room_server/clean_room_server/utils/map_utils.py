@@ -38,7 +38,7 @@ class MapUtils:
         px = int((x - self.origin_x) / self.resolution)
         
         py_flipped = int((y - self.origin_y) / self.resolution)
-        py = self.map_height - py_flipped
+        py = int(self.map_height - py_flipped)
         return px, py
     
     # -------------------------------------------------------------------

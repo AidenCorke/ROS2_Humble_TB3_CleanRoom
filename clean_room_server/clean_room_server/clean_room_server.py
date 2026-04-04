@@ -12,15 +12,13 @@ Professor   : Amirhossein Monjazeb
 # ROS2 Imports
 import rclpy
 from rclpy.node import Node
-from rclpy.action import ActionServer, CancelResponse, ActionClient
+from rclpy.action import ActionServer, CancelResponse
 from geometry_msgs.msg import PoseStamped
-from nav2_msgs.action import FollowWaypoints, NavigateToPose
 from rclpy.executors import MultiThreadedExecutor
 from action_msgs.msg import GoalStatusArray
-from nav2_msgs.action._follow_waypoints import FollowWaypoints_FeedbackMessage
 from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
 from rclpy.duration import Duration
-
+from tf2_ros import Buffer, TransformListener
 
 # Standard Imports
 import asyncio
@@ -63,50 +61,80 @@ class CleanRoomServer(Node):
                                            cancel_callback=self.cancel_callback     # Action canceling
                                            )
 
-        # Subscribe to robot's current pose
-        self.current_pose = None
-        self.pose_sub = self.create_subscription(PoseStamped,
-                                                 '/amcl_pose',
-                                                 self.pose_callback,
-                                                 10
-                                                 )
+        # Create a buffer and listener to TF in order to get current pose
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer,self)
+        
+        # Create Nav2 BasicNavigator instance
+        self.navigator = BasicNavigator(node_name='clean_room_navigator')   
+
+        # Wait for Nav2 to fully launch
+        self.navigator.waitUntilNav2Active()    
 
         # Initialize cleaning logic class
-        self.manager = CleaningManager(rooms_path, map_yaml_path)
-
-    # -------------------------------------------------------------------
-    # --- Collect pose ---
-    # -------------------------------------------------------------------
-    def pose_callback(self, msg):
-        """ This function collects the robots current pose."""
-        self.current_pose = msg.pose
-
+        self.manager = CleaningManager(rooms_path, map_yaml_path)   
 
     # -------------------------------------------------------------------
     # --- Cancel response recieving ---
     # -------------------------------------------------------------------
     def cancel_callback(self, goal_handle):
         self.get_logger().info('Received cancel request')
+        self.navigator.cancelTask()
         return CancelResponse.ACCEPT
 
+
+    # -------------------------------------------------------------------
+    # --- Detect current pose ---
+    # -------------------------------------------------------------------
+    def get_current_pose(self,time_out=1):
+        """This function extracts the current pose of the robot from TF, will try for 1 second before ."""
+        start = self.get_clock().now()
+        while (self.get_clock().now() - start).nanoseconds < time_out * 1e9:
+            try:
+                trans = self.tf_buffer.lookup_transform(
+                    'map',
+                    'base_link',
+                    rclpy.time.Time(seconds=0)
+                )
+                pose = PoseStamped()
+                pose.header = trans.header
+                pose.pose.position.x = trans.transform.translation.x
+                pose.pose.position.y = trans.transform.translation.y
+                pose.pose.position.z = trans.transform.translation.z
+                pose.pose.orientation = trans.transform.rotation
+
+                return pose
+            
+            except Exception as e:
+                warned = False
+                while not warned:
+                    self.get_logger().warn(f"Current pose lookup failed: {e}")    
+                    warned = True
+        # Time out reached and pose couldnt be extracted
+        self.get_logger().warn("TF pose lookup timed out.")
+        return None
 
     # -------------------------------------------------------------------
     # --- Detect current room ---
     # -------------------------------------------------------------------
     def detect_current_room(self):
         """ This function detects and returns the room the robot is currently in using current pose and defined room boundaries."""
-        # If no pose is present break out and return None
-        if self.current_pose is None:
-            return None
+
+        # Get current pose
+        current_pose = self.get_current_pose()
 
         # Convert robot pose to pixel coordinates
-        x = self.current_pose.position.x
-        y = self.current_pose.position.y
+        x = current_pose.pose.position.x
+        y = current_pose.pose.position.y
         px, py = self.manager.map_utils.world_to_pixel(x, y)
+
+        # Checks
+        #self.get_logger().info(f"x: {x}  px: {px}")
+        #self.get_logger().info(f"y: {y}  py: {py}")
 
         # Check each room polygon
         for room_name, params in self.manager.room_config.items():
-            if point_in_polygon((px, py, params['corners'])):
+            if point_in_polygon(px, py, params['corners']):
                 return room_name
 
         return None
@@ -122,17 +150,15 @@ class CleanRoomServer(Node):
         entry_px, entry_py = params["entry_point"]
         xw, yw = self.manager.map_utils.pixel_to_world(entry_px, entry_py)
 
-        # Create Nav2 BasicNavigator instance
-        navigator = BasicNavigator()
-
         # Set the initial (current) pose
-        navigator.setInitialPose(self.current_pose)
+        #current_pose = self.get_current_pose()
+        #self.navigator.setInitialPose(current_pose)
 
         # Wait for navigation to fully activate, since autostarting nav2
-        navigator.waitUntilNav2Active()
+        #self.navigator.waitUntilNav2Active()
 
         # Load map file
-        #navigator.changeMap(self.get_parameter('map_yaml').value)
+        #self.navigator.changeMap(self.get_parameter('map_yaml').value)
 
         # Obtain global and local costmaps
         #self.global_costmap = self.navigator.getGlobalCostmap()
@@ -149,36 +175,20 @@ class CleanRoomServer(Node):
 
         self.get_logger().info(f"Navigating to entry point of {room_name}...")
 
-        nav_start = self.navigator.get_clock().now()    # Time of nav start
-
-        nav_to_point = navigator.goToPose(goal)
-
-        while not navigator.isTaskComplete(task=nav_to_point):
+        nav_to_point = self.navigator.goToPose(goal)    # Send goal
+        i = 0
+        while not self.navigator.isTaskComplete():
             
             i += 1
-            feedback = navigator.getFeedback(task=nav_to_point)
-            if feedback and i % 5 == 0:
-                print( 'Estimated time of arrival: '
-                    + '{:.0f}'.format(
-                        Duration.from_msg(feedback.estimated_time_remaining).nanoseconds
-                        / 1e9
-                    )
-                    + ' seconds.'
-                )
-
-                print(
-                    'Distance remaining: '
-                    + '{:.2f}'.format(feedback.distance_remaining)
-                    + ' meters.'
-                )            
-                
-                # Cancel navigation is it takes 10 minutes
-                if Duration.from_msg(feedback.navigation_time) > Duration(seconds=600.0):
-                    navigator.cancelTask()
-            
+            feedback = self.navigator.getFeedback()
+            if feedback and i % 10 == 0:
+                self.get_logger().info('Distance remaining: '
+                                       + '{:.2f}'.format(feedback.distance_remaining)
+                                       + ' meters.'
+                                       )            
 
         # -- Results --    
-        result = navigator.getResult()  # Extract result
+        result = self.navigator.getResult()  # Extract result
         # Task succeeded
         if result == TaskResult.SUCCEEDED:                                  
             self.get_logger().info('Reached entry point.')
@@ -189,16 +199,13 @@ class CleanRoomServer(Node):
 
         # Task failed
         elif result == TaskResult.FAILED:                                   
-            (error_code, error_msg) = navigator.getTaskError()
+            (error_code, error_msg) = self.navigator.getTaskError()
             self.get_logger().warn(f'Entry point navigation failed!{error_code}:{error_msg}')
 
         # Weird result
         else:                                                              
             self.get_logger().warn('Entry point navigation has an invalid return status!')        
-        
-        navigator.lifecycleShutdown()   # Shutdown navigator instance
-
-        
+               
         return True
 
 
@@ -208,17 +215,17 @@ class CleanRoomServer(Node):
     def navigate_waypoints(self, ordered_waypoints):
         """This function sends a list of (x, y) waypoints to Nav2 FollowWaypoints."""
 
-        # -- Initialize navigator instance --
-        navigator = BasicNavigator()                    # Initialize navigator class instance
-        navigator.setInitialPose(self.current_pose)     # Set the initial (current) pose
-        navigator.waitUntilNav2Active()                 # Wait for nav2 to fully activate, since autostarting nav2
+        #current_pose = self.get_current_pose()        
+        #self.navigator.setInitialPose(current_pose)     # Set the initial (current) pose
 
         # -- Convert poses into readable goals for nav2 --        
         goal_poses = []
         total = len(ordered_waypoints)
 
         # Loop through all waypoints adding to pose
-        for i, (x, y) in enumerate(ordered_waypoints):
+        for i, (px, py) in enumerate(ordered_waypoints):
+            x, y = self.manager.map_utils.pixel_to_world(px,py)
+
             pose = PoseStamped()
             pose.header.frame_id = "map"
             pose.header.stamp = self.get_clock().now().to_msg()
@@ -235,28 +242,33 @@ class CleanRoomServer(Node):
             pose.pose.orientation = yaw_to_quaternion(yaw)
             goal_poses.append(pose)
 
-        nav_start = navigator.get_clock().now()
-        nav_to_wp = navigator.followWaypoints(goal_poses)
+        nav_to_wp = self.navigator.followWaypoints(goal_poses)  # Send goal
+        wp_past = 5 # Random number
+        time_start = self.get_clock().now()
+        time_elapsed = 0 # Initialize elapsed time
 
-        while not navigator.isTaskComplete(task=nav_to_wp):
+        i = 0
+        while not self.navigator.isTaskComplete():
+            i += 1
+            feedback = self.navigator.getFeedback()
+            wp_current = feedback.current_waypoint
+            time_elapsed = self.get_clock().now() - time_start
+            if feedback and wp_current != wp_past:  # Loops everytime waypoint is updated
+                self.get_logger().info('Executing current waypoint: '
+                                       + str(feedback.current_waypoint + 1)
+                                       + '/'
+                                       + str(len(goal_poses))
+                                    )
+                self.get_logger().info('Cleaning Time on Waypoint: ' + str(time_elapsed) + " seconds")
+                wp_past = wp_current
             
-            i = i + 1
-            feedback = navigator.getFeedback(task=nav_to_wp)
-            if feedback and i % 5 == 0:
-                print(
-                    'Executing current waypoint: '
-                    + str(feedback.current_waypoint + 1)
-                    + '/'
-                    + str(len(goal_poses))
-                )
-                now = navigator.get_clock().now()           
-                    
-                # Cancel navigation is it takes 10 minutes
-                if Duration.from_msg(feedback.navigation_time) > Duration(seconds=600.0):
-                        navigator.cancelTask()
-            
+            # Cancel navigation if elapsed time exceeds 600 seconds
+            if time_elapsed > Duration(seconds=600):
+                self.navigator.cancelTask()
+
+
         # -- Results --    
-        result = navigator.getResult()  # Extract result
+        result = self.navigator.getResult()  # Extract result
 
         # Task succeeded
         if result == TaskResult.SUCCEEDED:                                  
@@ -268,14 +280,12 @@ class CleanRoomServer(Node):
         
         # Task failed
         elif result == TaskResult.FAILED:                                   
-            (error_code, error_msg) = navigator.getTaskError()
+            (error_code, error_msg) = self.navigator.getTaskError()
             self.get_logger().warn(f'Cleaning failed!{error_code}:{error_msg}')
 
         # Weird result
         else:
             self.get_logger().warn('Goal has an invalid return status!')        
-        
-        navigator.lifecycleShutdown()   # Shutdown navigator instance once done
 
         return True
 
@@ -284,15 +294,15 @@ class CleanRoomServer(Node):
     # --- Execute action ---
     # -------------------------------------------------------------------
     async def execute_callback(self, goal_handle):
-        
         room_name = goal_handle.request.room_name  # Extract room name from goal
         self.get_logger().info(f"Cleaning requested for room: {room_name}") # Publish request recieved
+
 
         # Room detection and navigation to entry point if needed
         current_room = self.detect_current_room()
         if current_room != room_name:
-            self.get_logger().info(f"Robot navigating to {room_name} now...")
-            success = await self.navigate_to_entry_point(room_name)   # Navigate to designated entry point
+            self.get_logger().info(f"Robot currently in {current_room}.")
+            success = self.navigate_to_entry_point(room_name)   # Navigate to designated entry point
             
             # If it fails to reach the entry point
             if not success:
@@ -306,13 +316,16 @@ class CleanRoomServer(Node):
 
 
         # Create path from cleaning operations
+        current_pose = self.get_current_pose()
         ordered_waypoints = self.manager.cleaning_path(room_name,
-                                                       self.current_pose,
+                                                       current_pose,
                                                        )
+        
         self.get_logger().info("Starting cleaning path generation...")
 
+
         # Send navigation request with created path
-        success = await self.navigate_waypoints(ordered_waypoints) # wait for it to complete before proceeding
+        success = self.navigate_waypoints(ordered_waypoints) # wait for it to complete before proceeding
         if not success: # If it fails in cleaning navigation
             result = CleanRoom.Result()
             result.success = False
@@ -326,6 +339,7 @@ class CleanRoomServer(Node):
         result.success = True
         result.message = f"Finished cleaning {room_name} successfully"
         goal_handle.succeed()
+
         return result
 
 
