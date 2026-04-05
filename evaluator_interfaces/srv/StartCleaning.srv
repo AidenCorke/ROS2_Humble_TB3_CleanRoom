@@ -1,0 +1,4 @@
+geometry_msgs/Point[4] boundary_points
+---
+bool success
+string message

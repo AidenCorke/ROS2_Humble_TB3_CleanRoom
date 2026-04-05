@@ -9,27 +9,28 @@ Professor   : Amirhossein Monjazeb
 # ======================================================
 # --- Imports ---
 # ======================================================
-# ROS2 Imports
+# - ROS2 Imports -
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionServer, CancelResponse
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, Point
 from rclpy.executors import MultiThreadedExecutor
-from action_msgs.msg import GoalStatusArray
 from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
 from rclpy.duration import Duration
 from tf2_ros import Buffer, TransformListener
 
-# Standard Imports
-import asyncio
+# - Standard Imports -
 import math
+import yaml
 
-# Custom Imports
+# - Custom Imports -
 from clean_room_interfaces.action import CleanRoom
 from clean_room_server.planner.cleaning_manager import CleaningManager
 from clean_room_server.utils.geometry_utils import point_in_polygon, yaw_to_quaternion
-#from clean_room_operations.clean_room_operations.utils.geometry_utils import point_in_polygon
-#from clean_room_operations.clean_room_operations.cleaning_manager import CleaningManager
+
+# - Evaluation Imports -
+from evaluator_interfaces.srv import StartCleaning
+from std_srvs.srv import Trigger
 
 # ======================================================
 # --- Node ---
@@ -44,13 +45,13 @@ class CleanRoomServer(Node):
         self.declare_parameter('map_yaml', '/dev/null')
 
         # Extract parameters
-        rooms_path = self.get_parameter('rooms_config').value
-        map_yaml_path = self.get_parameter('map_yaml').value
+        self.rooms_path = self.get_parameter('rooms_config').value
+        self.map_yaml_path = self.get_parameter('map_yaml').value
 
         # Warning if parameters aren't loaded correct
-        if rooms_path == "/dev/null":
+        if self.rooms_path == "/dev/null":
             self.get_logger().error("rooms_path parameter not set")
-        if map_yaml_path == "/dev/null":
+        if self.map_yaml_path == "/dev/null":
             self.get_logger().error("maps_path parameter not set")
 
         # create action server node
@@ -72,7 +73,13 @@ class CleanRoomServer(Node):
         self.navigator.waitUntilNav2Active()    
 
         # Initialize cleaning logic class
-        self.manager = CleaningManager(rooms_path, map_yaml_path)   
+        self.manager = CleaningManager(self.rooms_path, self.map_yaml_path)   
+
+        # Create evaluation services
+        self.start_eval_cli = self.create_client(StartCleaning, 'start_eval')
+        self.start_eval_req = StartCleaning.Request()
+        self.stop_eval_cli = self.create_client(Trigger, 'stop_eval')
+        self.stop_eval_req = Trigger.Request()
 
     # -------------------------------------------------------------------
     # --- Cancel response recieving ---
@@ -214,9 +221,13 @@ class CleanRoomServer(Node):
     # -------------------------------------------------------------------
     def navigate_waypoints(self, ordered_waypoints):
         """This function sends a list of (x, y) waypoints to Nav2 FollowWaypoints."""
-
-        #current_pose = self.get_current_pose()        
-        #self.navigator.setInitialPose(current_pose)     # Set the initial (current) pose
+        # Load room config
+        #with open(self.rooms_path, 'r') as f:
+        #    data = yaml.safe_load(f)
+        #room = data["room_name"]
+        #corners_pix = room['corners']
+        params = self.manager.room_config[self.room_name]
+        
 
         # -- Convert poses into readable goals for nav2 --        
         goal_poses = []
@@ -224,25 +235,46 @@ class CleanRoomServer(Node):
 
         # Loop through all waypoints adding to pose
         for i, (px, py) in enumerate(ordered_waypoints):
-            x, y = self.manager.map_utils.pixel_to_world(px,py)
+            wx, wy = self.manager.map_utils.pixel_to_world(px,py)
 
             pose = PoseStamped()
             pose.header.frame_id = "map"
             pose.header.stamp = self.get_clock().now().to_msg()
-            pose.pose.position.x = float(x)
-            pose.pose.position.y = float(y)
+            pose.pose.position.x = float(wx)
+            pose.pose.position.y = float(wy)
 
             # Compute orientation toward next waypoint
             if i < len(ordered_waypoints) - 1:
                 nx, ny = ordered_waypoints[i+1]
-                yaw = math.atan2(ny - y, nx - x)
+                yaw = math.atan2(ny - wy, nx - wx)
             else:
                 yaw = 0.0  # final waypoint
 
-            pose.pose.orientation = yaw_to_quaternion(yaw)
+            #pose.pose.orientation = yaw_to_quaternion(yaw)
             goal_poses.append(pose)
 
-        nav_to_wp = self.navigator.followWaypoints(goal_poses)  # Send goal
+        # -- Extract room corners for evaluation service --
+        # Loop through each corner 
+        boundary_points = []
+        for px,py in params['corners']:
+            # Convert from pixel to world
+            wx, wy = self.manager.map_utils.pixel_to_world(px,py)
+
+            # Store in point message
+            point = Point()
+            point.x = wx
+            point.y = wy
+            #point.z = 0
+
+            # Add to list
+            boundary_points.append(point)
+
+        # Send evaluation request
+        self.start_eval_req.boundary_points = boundary_points
+        self.start_eval_cli.call_async(self.start_eval_req)
+
+        # -- Send goal to Nav2 --
+        nav_to_wp = self.navigator.followWaypoints(goal_poses)
         wp_past = 5 # Random number
         time_start = self.get_clock().now()
         time_elapsed = 0 # Initialize elapsed time
@@ -252,23 +284,26 @@ class CleanRoomServer(Node):
             i += 1
             feedback = self.navigator.getFeedback()
             wp_current = feedback.current_waypoint
-            time_elapsed = self.get_clock().now() - time_start
+            time_elapsed = (self.get_clock().now() - time_start)
             if feedback and wp_current != wp_past:  # Loops everytime waypoint is updated
                 self.get_logger().info('Executing current waypoint: '
                                        + str(feedback.current_waypoint + 1)
                                        + '/'
                                        + str(len(goal_poses))
                                     )
-                self.get_logger().info('Cleaning Time on Waypoint: ' + str(time_elapsed) + " seconds")
+                #self.get_logger().info('Cleaning Time on Waypoint: ' + str(time_elapsed) + " seconds")
                 wp_past = wp_current
             
             # Cancel navigation if elapsed time exceeds 600 seconds
             if time_elapsed > Duration(seconds=600):
                 self.navigator.cancelTask()
+                self.start_eval_cli.destroy()
+                self.stop_eval_cli.destroy()
 
 
         # -- Results --    
         result = self.navigator.getResult()  # Extract result
+        self.stop_eval_cli.call_async(self.stop_eval_req)   # send eval stop request
 
         # Task succeeded
         if result == TaskResult.SUCCEEDED:                                  
@@ -294,11 +329,12 @@ class CleanRoomServer(Node):
     # --- Execute action ---
     # -------------------------------------------------------------------
     async def execute_callback(self, goal_handle):
+        # -- Setup --
         room_name = goal_handle.request.room_name  # Extract room name from goal
         self.get_logger().info(f"Cleaning requested for room: {room_name}") # Publish request recieved
+        self.room_name = room_name
 
-
-        # Room detection and navigation to entry point if needed
+        # -- Room detection and navigation to entry point if needed --
         current_room = self.detect_current_room()
         if current_room != room_name:
             self.get_logger().info(f"Robot currently in {current_room}.")
@@ -315,7 +351,7 @@ class CleanRoomServer(Node):
         self.get_logger().info(f"Currently in {room_name}, beginning cleaning...")
 
 
-        # Create path from cleaning operations
+        # -- Cleaning Operations --
         current_pose = self.get_current_pose()
         ordered_waypoints = self.manager.cleaning_path(room_name,
                                                        current_pose,
@@ -334,7 +370,7 @@ class CleanRoomServer(Node):
             return result
 
 
-        # Result message handling
+        # -- Result message handling --
         result = CleanRoom.Result()
         result.success = True
         result.message = f"Finished cleaning {room_name} successfully"

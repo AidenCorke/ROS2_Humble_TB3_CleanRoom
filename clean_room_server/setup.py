@@ -29,7 +29,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'clean_room_server = clean_room_server.clean_room_server:main'
+            'clean_room_server = clean_room_server.clean_room_server:main',
+            'initial_pose_publisher = clean_room_server.initial_pose_publisher:main',
         ],
     },
 )

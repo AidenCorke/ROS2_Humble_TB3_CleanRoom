@@ -13,6 +13,7 @@ Professor   : Amirhossein Monjazeb
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
+import sys
 
 # Custom Imports
 from clean_room_interfaces.action import CleanRoom
@@ -93,7 +94,7 @@ class CleanRoomClient(Node):
         self.get_logger().info(f"Result: success={result.success}, message='{result.message}'")
 
         # Shutdown node
-        #rclpy.shutdown()
+        rclpy.shutdown()
 
 
 
@@ -102,9 +103,9 @@ class CleanRoomClient(Node):
 # ======================================================
 def main(args=None):
     rclpy.init(args=args)
-    node = CleanRoomClient()
-    rclpy.spin(node)
-    rclpy.shutdown()
+    node = CleanRoomClient() # create client node
+    node.send_goal(sys.argv[1]) # Send goal based on command line argument
+    rclpy.spin(node)    # run node (will shutdown once result is sent back)
 
 
 if __name__ == '__main__':

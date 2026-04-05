@@ -6,7 +6,7 @@ room_name:
       - [296, 209]          # bottom-right
       - [245, 209]          # bottom-left
     entry_point: [271, 115] # Map coordinates
-    mesh_resolution: 5      # Pixels
+    mesh_resolution: 8      # Pixels
     inflation_radius: 3     # Pixel
   kitchen:
     corners:
@@ -15,7 +15,7 @@ room_name:
       - [296, 109]          # bottom-right
       - [195, 109]          # bottom-left
     entry_point: [245, 85] # Map coordinates
-    mesh_resolution: 5      # Pixels
+    mesh_resolution: 8      # Pixels
     inflation_radius: 3     # Pixel
   pantry:
     corners:
@@ -24,7 +24,7 @@ room_name:
       - [193, 86]          # bottom-right
       - [148, 86]          # bottom-left
     entry_point: [192, 13] # Map coordinates
-    mesh_resolution: 5      # Pixels
+    mesh_resolution: 8      # Pixels
     inflation_radius: 3     # Pixel
   hallway:
     corners:
@@ -42,7 +42,7 @@ room_name:
       - [147, 108]          # bottom-right
       - [47, 108]          # bottom-left
     entry_point: [96, 88]   # Map coordinates 
-    mesh_resolution: 5     # Pixels
+    mesh_resolution: 8     # Pixels
     inflation_radius: 3     # Pixel
   library:
     corners:
@@ -51,7 +51,7 @@ room_name:
       - [46, 85]          # bottom-right
       - [0, 85]          # bottom-left
     entry_point: [40, 40] # Map coordinates
-    mesh_resolution: 5     # Pixels
+    mesh_resolution: 8     # Pixels
     inflation_radius: 3     # Pixels 
   bedroom:
     corners:
@@ -60,5 +60,5 @@ room_name:
       - [46, 182]          # bottom-right
       - [0, 182]          # bottom-left
     entry_point: [22, 88] # Map coordinates
-    mesh_resolution: 5     # Pixels
-    inflation_radius: 3     # Pixels          
+    mesh_resolution: 8     # Pixels
+    inflation_radius: 4     # Pixels          
