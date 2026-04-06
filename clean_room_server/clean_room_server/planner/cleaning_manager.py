@@ -16,7 +16,6 @@ import yaml
 from clean_room_server.planner.mapping.map_processor import MapProcessor
 from clean_room_server.planner.planning.room_cleaning_path_planner import RoomPathPlanner
 from clean_room_server.utils.map_utils import MapUtils
-#from clean_room_server.planner.visualizing.rviz_markers import RVizMarkers
 
 # ======================================================
 # --- Class ---

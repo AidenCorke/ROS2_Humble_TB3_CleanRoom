@@ -27,6 +27,9 @@ import yaml
 from clean_room_interfaces.action import CleanRoom
 from clean_room_server.planner.cleaning_manager import CleaningManager
 from clean_room_server.utils.geometry_utils import point_in_polygon, yaw_to_quaternion
+from clean_room_server.utils.map_utils import MapUtils
+from clean_room_server.planner.visualizing.rviz_markers import RVizMarkers
+
 
 # - Evaluation Imports -
 from evaluator_interfaces.srv import StartCleaning
@@ -39,7 +42,7 @@ class CleanRoomServer(Node):
 
     def __init__(self):
         super().__init__('clean_room_server')
-
+        # -- Parameters --
         # Declare parameters
         self.declare_parameter('rooms_config', '/dev/null')
         self.declare_parameter('map_yaml', '/dev/null')
@@ -54,6 +57,7 @@ class CleanRoomServer(Node):
         if self.map_yaml_path == "/dev/null":
             self.get_logger().error("maps_path parameter not set")
 
+        # -- Action Server Node --
         # create action server node
         self._action_server = ActionServer(self,                                    # Node
                                            CleanRoom,                               # Action type
@@ -61,25 +65,28 @@ class CleanRoomServer(Node):
                                            execute_callback=self.execute_callback,  # Action execution
                                            cancel_callback=self.cancel_callback     # Action canceling
                                            )
-
+        # -- Pose Listener --
         # Create a buffer and listener to TF in order to get current pose
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer,self)
         
+        # -- Nav2 Class -- 
         # Create Nav2 BasicNavigator instance
         self.navigator = BasicNavigator(node_name='clean_room_navigator')   
+        self.navigator.waitUntilNav2Active()    # Wait for Nav2 to fully launch
 
-        # Wait for Nav2 to fully launch
-        self.navigator.waitUntilNav2Active()    
-
-        # Initialize cleaning logic class
+        # -- Cleaning Logic Class --
         self.manager = CleaningManager(self.rooms_path, self.map_yaml_path)   
 
-        # Create evaluation services
+        # -- Evaluation Services --
         self.start_eval_cli = self.create_client(StartCleaning, 'start_eval')
         self.start_eval_req = StartCleaning.Request()
         self.stop_eval_cli = self.create_client(Trigger, 'stop_eval')
         self.stop_eval_req = Trigger.Request()
+
+        # -- Visualization --
+        self.map_utils = MapUtils(self.map_yaml_path)
+        self.viz = RVizMarkers(self, self.map_utils)
 
     # -------------------------------------------------------------------
     # --- Cancel response recieving ---
@@ -219,14 +226,14 @@ class CleanRoomServer(Node):
     # -------------------------------------------------------------------
     # --- Navigate through cleaning path ---
     # -------------------------------------------------------------------
-    def navigate_waypoints(self, ordered_waypoints):
+    def navigate_waypoints(self, ordered_waypoints, params):
         """This function sends a list of (x, y) waypoints to Nav2 FollowWaypoints."""
         # Load room config
         #with open(self.rooms_path, 'r') as f:
         #    data = yaml.safe_load(f)
         #room = data["room_name"]
         #corners_pix = room['corners']
-        params = self.manager.room_config[self.room_name]
+        
         
 
         # -- Convert poses into readable goals for nav2 --        
@@ -245,12 +252,13 @@ class CleanRoomServer(Node):
 
             # Compute orientation toward next waypoint
             if i < len(ordered_waypoints) - 1:
-                nx, ny = ordered_waypoints[i+1]
-                yaw = math.atan2(ny - wy, nx - wx)
+                px_n, py_n = ordered_waypoints[i+1]
+                wx_n, wy_n = self.manager.map_utils.pixel_to_world(px_n,py_n)
+                yaw = math.atan2(wy_n - wy, wx_n - wx)
             else:
                 yaw = 0.0  # final waypoint
 
-            #pose.pose.orientation = yaw_to_quaternion(yaw)
+            pose.pose.orientation = yaw_to_quaternion(yaw)
             goal_poses.append(pose)
 
         # -- Extract room corners for evaluation service --
@@ -294,8 +302,8 @@ class CleanRoomServer(Node):
                 #self.get_logger().info('Cleaning Time on Waypoint: ' + str(time_elapsed) + " seconds")
                 wp_past = wp_current
             
-            # Cancel navigation if elapsed time exceeds 600 seconds
-            if time_elapsed > Duration(seconds=600):
+            # Cancel navigation if elapsed time exceeds 1200 seconds
+            if time_elapsed > Duration(seconds=1200):
                 self.navigator.cancelTask()
                 self.start_eval_cli.destroy()
                 self.stop_eval_cli.destroy()
@@ -325,6 +333,7 @@ class CleanRoomServer(Node):
         return True
 
 
+
     # -------------------------------------------------------------------
     # --- Execute action ---
     # -------------------------------------------------------------------
@@ -333,6 +342,10 @@ class CleanRoomServer(Node):
         room_name = goal_handle.request.room_name  # Extract room name from goal
         self.get_logger().info(f"Cleaning requested for room: {room_name}") # Publish request recieved
         self.room_name = room_name
+        params = self.manager.room_config[self.room_name]
+
+        # -- Visualize Room Polygon -- 
+        self.viz.publish_room_polygon(params["corners"])
 
         # -- Room detection and navigation to entry point if needed --
         current_room = self.detect_current_room()
@@ -350,18 +363,21 @@ class CleanRoomServer(Node):
             
         self.get_logger().info(f"Currently in {room_name}, beginning cleaning...")
 
-
         # -- Cleaning Operations --
+        self.get_logger().info("Starting planning cleaning path...")
         current_pose = self.get_current_pose()
         ordered_waypoints = self.manager.cleaning_path(room_name,
                                                        current_pose,
                                                        )
+        self.get_logger().info("Completed planning cleaning path.")
         
-        self.get_logger().info("Starting cleaning path generation...")
-
+        # -- Visualize cleaning path --
+        self.viz.publish_waypoints(ordered_waypoints)
+        self.viz.publish_path(ordered_waypoints)
+        
 
         # Send navigation request with created path
-        success = self.navigate_waypoints(ordered_waypoints) # wait for it to complete before proceeding
+        success = self.navigate_waypoints(ordered_waypoints,params) # wait for it to complete before proceeding
         if not success: # If it fails in cleaning navigation
             result = CleanRoom.Result()
             result.success = False
@@ -375,6 +391,7 @@ class CleanRoomServer(Node):
         result.success = True
         result.message = f"Finished cleaning {room_name} successfully"
         goal_handle.succeed()
+        self.viz.clear() # clear old path visualizations
 
         return result
 
