@@ -11,7 +11,7 @@ Professor   : Amirhossein Monjazeb
 #=======================================
 from clean_room_server.planner.mapping.waypoint_mesher import WaypointMesh
 from clean_room_server.planner.planning.tsp_solver_greedy import GreedyTSP
-from clean_room_server.planner.visualizing.visualize import visualize_room_and_path, visualize_inflation
+#from clean_room_server.planner.visualizing.visualize import visualize_room_and_path, visualize_inflation
 import numpy as np
 
 #=======================================

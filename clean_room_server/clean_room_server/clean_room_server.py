@@ -21,7 +21,7 @@ from tf2_ros import Buffer, TransformListener
 
 # - Standard Imports -
 import math
-import yaml
+import time
 
 # - Custom Imports -
 from clean_room_interfaces.action import CleanRoom
@@ -101,7 +101,7 @@ class CleanRoomServer(Node):
     # --- Detect current pose ---
     # -------------------------------------------------------------------
     def get_current_pose(self,time_out=1):
-        """This function extracts the current pose of the robot from TF, will try for 1 second before ."""
+        """This function extracts the current pose of the robot from TF, will try for 1 second before canceling."""
         start = self.get_clock().now()
         while (self.get_clock().now() - start).nanoseconds < time_out * 1e9:
             try:
@@ -226,15 +226,24 @@ class CleanRoomServer(Node):
     # -------------------------------------------------------------------
     # --- Navigate through cleaning path ---
     # -------------------------------------------------------------------
-    def navigate_waypoints(self, ordered_waypoints, params):
+    def navigate_waypoints(self, ordered_waypoints, params, time_wp_limit=60.0):
         """This function sends a list of (x, y) waypoints to Nav2 FollowWaypoints."""
-        # Load room config
-        #with open(self.rooms_path, 'r') as f:
-        #    data = yaml.safe_load(f)
-        #room = data["room_name"]
-        #corners_pix = room['corners']
-        
-        
+
+        # -- Extract room corners for evaluation service --
+        # Loop through each corner 
+        boundary_points = []
+        for px,py in params['corners']:
+            # Convert from pixel to world
+            wx, wy = self.manager.map_utils.pixel_to_world(px,py)
+
+            # Store in point message
+            point = Point()
+            point.x = wx
+            point.y = wy
+            #point.z = 0
+
+            # Add to list
+            boundary_points.append(point)
 
         # -- Convert poses into readable goals for nav2 --        
         goal_poses = []
@@ -261,21 +270,7 @@ class CleanRoomServer(Node):
             pose.pose.orientation = yaw_to_quaternion(yaw)
             goal_poses.append(pose)
 
-        # -- Extract room corners for evaluation service --
-        # Loop through each corner 
-        boundary_points = []
-        for px,py in params['corners']:
-            # Convert from pixel to world
-            wx, wy = self.manager.map_utils.pixel_to_world(px,py)
 
-            # Store in point message
-            point = Point()
-            point.x = wx
-            point.y = wy
-            #point.z = 0
-
-            # Add to list
-            boundary_points.append(point)
 
         # Send evaluation request
         self.start_eval_req.boundary_points = boundary_points
@@ -283,30 +278,42 @@ class CleanRoomServer(Node):
 
         # -- Send goal to Nav2 --
         nav_to_wp = self.navigator.followWaypoints(goal_poses)
-        wp_past = 5 # Random number
-        time_start = self.get_clock().now()
-        time_elapsed = 0 # Initialize elapsed time
 
-        i = 0
+        # Timing and waypoint tracking initialization
+        wp_past = 5 # Random number
+        time_start = time.time()
+        time_wp_start = time_start
+
         while not self.navigator.isTaskComplete():
-            i += 1
             feedback = self.navigator.getFeedback()
             wp_current = feedback.current_waypoint
-            time_elapsed = (self.get_clock().now() - time_start)
+            time_now = time.time()
+            time_tot = (time_now - time_start)
+            time_wp_cur = time_now - time_wp_start
+
+
             if feedback and wp_current != wp_past:  # Loops everytime waypoint is updated
                 self.get_logger().info('Executing current waypoint: '
                                        + str(feedback.current_waypoint + 1)
                                        + '/'
                                        + str(len(goal_poses))
                                     )
-                #self.get_logger().info('Cleaning Time on Waypoint: ' + str(time_elapsed) + " seconds")
                 wp_past = wp_current
-            
-            # Cancel navigation if elapsed time exceeds 1200 seconds
-            if time_elapsed > Duration(seconds=1200):
+                time_wp_start = time_wp_cur
+                
+            '''
+            # Cancel navigation if current waypoint elapsed time exceeds set limit
+            if time_wp_cur > time_wp_limit:
+                self.get_logger().warn(f"Waypoint {str(wp_current+1)} taking too long - skipping.")
+                self.navigator.cancelTask()
+
+            # Cancel navigation if total elapsed time exceeds set limit
+            if time_tot > 1800.0:
                 self.navigator.cancelTask()
                 self.start_eval_cli.destroy()
                 self.stop_eval_cli.destroy()
+                break
+            '''
 
 
         # -- Results --    
