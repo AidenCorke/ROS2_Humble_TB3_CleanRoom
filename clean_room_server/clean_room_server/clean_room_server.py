@@ -226,7 +226,7 @@ class CleanRoomServer(Node):
     # -------------------------------------------------------------------
     # --- Navigate through cleaning path ---
     # -------------------------------------------------------------------
-    def navigate_waypoints(self, ordered_waypoints, params, time_wp_limit=60.0):
+    def navigate_waypoints(self, ordered_waypoints, params, wp_time_limit=30.0):
         """This function sends a list of (x, y) waypoints to Nav2 FollowWaypoints."""
 
         # -- Extract room corners for evaluation service --
@@ -244,15 +244,17 @@ class CleanRoomServer(Node):
 
             # Add to list
             boundary_points.append(point)
-
-        # -- Convert poses into readable goals for nav2 --        
-        goal_poses = []
-        total = len(ordered_waypoints)
-
+        # Send evaluation request
+        self.start_eval_req.boundary_points = boundary_points
+        self.start_eval_cli.call_async(self.start_eval_req)
+               
+        time_start = time.time()       
+        time_total_limit = time_start + 18000
         # Loop through all waypoints adding to pose
         for i, (px, py) in enumerate(ordered_waypoints):
-            wx, wy = self.manager.map_utils.pixel_to_world(px,py)
 
+            # -- Convert poses into readable goals for nav2 -- 
+            wx, wy = self.manager.map_utils.pixel_to_world(px,py)
             pose = PoseStamped()
             pose.header.frame_id = "map"
             pose.header.stamp = self.get_clock().now().to_msg()
@@ -268,75 +270,49 @@ class CleanRoomServer(Node):
                 yaw = 0.0  # final waypoint
 
             pose.pose.orientation = yaw_to_quaternion(yaw)
-            goal_poses.append(pose)
+
+            # -- Send goal to Nav2 --
+            nav_to_wp = self.navigator.goToPose(pose)
+
+            # Timing and waypoint tracking initialization
+            wp_past = 5 # Random number
+            time_wp_start = time.time()
+            time_wp_limit = wp_time_limit + time_wp_start
+
+            while not self.navigator.isTaskComplete():  # Loop until task complete
+                feedback = self.navigator.getFeedback()
+                wp_current = i
+                time_now = time.time()
+                time_tot = (time_now - time_start)  # Total elapsed time
+                time_wp_cur = time_now - time_wp_start  # Elapsed time on waypoint
 
 
+                if feedback and wp_current != wp_past:  # Loops everytime waypoint is updated
+                    self.get_logger().info('Executing waypoint - '
+                                        + str(wp_current + 1)
+                                        + '/'
+                                        + str(len(ordered_waypoints))
+                                        )
+                    wp_past = wp_current
+                    time_wp_start = time_wp_cur
 
-        # Send evaluation request
-        self.start_eval_req.boundary_points = boundary_points
-        self.start_eval_cli.call_async(self.start_eval_req)
-
-        # -- Send goal to Nav2 --
-        nav_to_wp = self.navigator.followWaypoints(goal_poses)
-
-        # Timing and waypoint tracking initialization
-        wp_past = 5 # Random number
-        time_start = time.time()
-        time_wp_start = time_start
-
-        while not self.navigator.isTaskComplete():
-            feedback = self.navigator.getFeedback()
-            wp_current = feedback.current_waypoint
-            time_now = time.time()
-            time_tot = (time_now - time_start)
-            time_wp_cur = time_now - time_wp_start
-
-
-            if feedback and wp_current != wp_past:  # Loops everytime waypoint is updated
-                self.get_logger().info('Executing current waypoint: '
-                                       + str(feedback.current_waypoint + 1)
-                                       + '/'
-                                       + str(len(goal_poses))
-                                    )
-                wp_past = wp_current
-                time_wp_start = time_wp_cur
                 
-            '''
-            # Cancel navigation if current waypoint elapsed time exceeds set limit
-            if time_wp_cur > time_wp_limit:
-                self.get_logger().warn(f"Waypoint {str(wp_current+1)} taking too long - skipping.")
-                self.navigator.cancelTask()
+                # Cancel navigation if current waypoint elapsed time exceeds set limit
+                if time_wp_cur > time_wp_limit:
+                    self.get_logger().warn(f"Waypoint {str(wp_current+1)} taking too long - skipping.")
+                    self.navigator.cancelTask()
+                    break
 
-            # Cancel navigation if total elapsed time exceeds set limit
-            if time_tot > 1800.0:
-                self.navigator.cancelTask()
-                self.start_eval_cli.destroy()
-                self.stop_eval_cli.destroy()
-                break
-            '''
-
-
-        # -- Results --    
-        result = self.navigator.getResult()  # Extract result
-        self.stop_eval_cli.call_async(self.stop_eval_req)   # send eval stop request
-
-        # Task succeeded
-        if result == TaskResult.SUCCEEDED:                                  
-            self.get_logger().info('Cleaning completed successfully!')
-
-        # Task canceled
-        elif result == TaskResult.CANCELED:                                 
-            self.get_logger().info('Cleaning was cancelled!')
+                # Cancel navigation if total elapsed time exceeds set limit
+                if time_tot > time_total_limit:
+                    self.navigator.cancelTask()
+                    self.start_eval_cli.destroy()
+                    self.stop_eval_cli.destroy()
+                    break  
         
-        # Task failed
-        elif result == TaskResult.FAILED:                                   
-            (error_code, error_msg) = self.navigator.getTaskError()
-            self.get_logger().warn(f'Cleaning failed!{error_code}:{error_msg}')
-
-        # Weird result
-        else:
-            self.get_logger().warn('Goal has an invalid return status!')        
-
+        # -- Final close out --
+        self.get_logger().info("Cleaning complete!")            
+        self.stop_eval_cli.call_async(self.stop_eval_req)   # send eval stop request
         return True
 
 
