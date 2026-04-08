@@ -296,7 +296,6 @@ class CleanRoomServer(Node):
                     wp_past = wp_current
                     time_wp_start = time_wp_cur
 
-                
                 # Cancel navigation if current waypoint elapsed time exceeds set limit
                 if time_wp_cur > time_wp_limit:
                     self.get_logger().warn(f"Waypoint {str(wp_current+1)} taking too long - skipping.")

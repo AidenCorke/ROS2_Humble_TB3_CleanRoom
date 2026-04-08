@@ -43,7 +43,7 @@ room_name:
       - [47, 108]          # bottom-left
     entry_point: [96, 88]   # Map coordinates 
     mesh_resolution: 8     # Pixels
-    inflation_radius: 2     # Pixel
+    inflation_radius: 3     # Pixel
   library:
     corners:
       - [0, 0]          # top-left
@@ -52,7 +52,7 @@ room_name:
       - [0, 85]          # bottom-left
     entry_point: [40, 40] # Map coordinates
     mesh_resolution: 8     # Pixels
-    inflation_radius: 5     # Pixels 
+    inflation_radius: 3     # Pixels 
   bedroom:
     corners:
       - [0, 86]          # top-left
