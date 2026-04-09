@@ -1,0 +1,86 @@
+go_to_room_node:
+  ros__parameters:
+    rooms:
+      hallway:
+        description: "Middle south"
+        bounds:
+          x_min: -5.10
+          x_max:  7.40
+          y_min: -0.20
+          y_max:  0.90
+        nav_goal:
+          x:  1.00
+          y:  0.50
+          yaw: 0.0
+
+      living_room:
+        description: "NW2"
+        bounds:
+          x_min: -5.10
+          x_max:  0.00
+          y_min:  0.90
+          y_max:  5.30
+        nav_goal:
+          x: -2.50
+          y:  3.50
+          yaw: 0.0
+
+      library:
+        description: "NW"
+        bounds:
+          x_min: -7.40
+          x_max: -5.10
+          y_min:  0.90
+          y_max:  5.30
+        nav_goal:
+          x: -6.50
+          y:  3.00
+          yaw: 0.0
+
+      bedroom:
+        description: "SW"
+        bounds:
+          x_min: -7.40
+          x_max: -5.10
+          y_min: -3.75
+          y_max:  0.90
+        nav_goal:
+          x: -6.50
+          y: -0.50
+          yaw: -1.57
+
+      kitchen:
+        description: "NE"
+        bounds:
+          x_min:  2.25
+          x_max:  7.40
+          y_min:  0.90
+          y_max:  5.30
+        nav_goal:
+          x:  4.50
+          y:  3.00
+          yaw: 0.0
+
+      dining_room:
+        description: "SE"
+        bounds:
+          x_min:  4.90
+          x_max:  7.40
+          y_min: -5.10
+          y_max: -0.20
+        nav_goal:
+          x:  5.50
+          y: -1.45
+          yaw: 0.0
+
+      pantry:
+        description: "middle north"
+        bounds:
+          x_min:  0.00
+          x_max:  2.15
+          y_min:  0.90
+          y_max:  5.30
+        nav_goal:
+          x:  1.00
+          y:  3.00
+          yaw: 0.0

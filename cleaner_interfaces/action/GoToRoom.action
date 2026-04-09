@@ -1,0 +1,23 @@
+# GoToRoom.action
+# Place in: go_to_room_interfaces/action/GoToRoom.action
+# Build with: colcon build --packages-select go_to_room_interfaces
+
+# ── Goal ──────────────────────────────────────────────────────────────────────
+string room_name
+# Valid values: hallway  living_room  library  bedroom
+#               kitchen  pantry  dining_room
+
+---
+
+# ── Result ────────────────────────────────────────────────────────────────────
+bool   success         # True if the robot reached the room
+string final_status    # "succeeded" | "failed" | "canceled"
+
+---
+
+# ── Feedback ──────────────────────────────────────────────────────────────────
+string  current_room          # Room the robot is currently in (from AMCL)
+int32   waypoints_total       # Total waypoints in this route leg
+int32   waypoints_remaining   # Waypoints not yet reached
+float32 distance_remaining    # Nav2 distance estimate to next waypoint (metres)
+float32 elapsed_seconds       # Seconds since navigation started
