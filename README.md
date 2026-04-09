@@ -1,55 +1,53 @@
-# TurtleBot3 Cleaning Evaluator System
+# TurtleBot3 Cleaning System
 
-This repository contains the **Referee Node** used to measure project performance for the robotic cleaning task. It calculates Area Coverage (%) and Simulation Time (seconds) within a designated room.
+This repository contains the full ROS2 package from **Group 1** for the MCG5138 Introduction to Autonomous Mobile Robotics course project. It contains client/server pairs for cleaning or navigating to designated rooms using a TurtleBot3 Waffle (TB3) robotic platform. It sends cleaning evaluation start and stop requests automatically to the evaluator node during cleaning. 
 
 ## 1. Installation
 
 1. Clone this repository into your ROS 2 workspace's `src` folder:
    ```bash
    cd ~/ros2_ws/src
-   git clone git@github.com:ake1999/evaluator_system.git
+   git clone https://github.com/AidenCorke/ROS2_Humble_TB3_CleanRoom.git
    ```
 2. Build the workspace:
    ```bash
    cd ~/ros2_ws
-   colcon build --symlink-install --packages-select evaluator_interfaces evaluator_core
+   colcon build --symlink-install
    source install/setup.bash
    ```
 
-## 2. Setup for Presentation (RViz)
+## 2. Launching the system
 
-To see your progress in real-time, you **must** add the evaluation map to RViz:
-1. Launch your simulation and Navigation2 stack.
-2. In **RViz**, click **Add** -> **By Topic**.
-3. Select `/evaluator/cleaned_map` (Map display).
-4. Change the **Color Scheme** to `costmap` or `rainbow` to see the green cleaning trail.
+Terminal 1 - Simulation Files:
+Using a single launch file we launch the TB3 house environment in gazebo, the Navigation2 stack with custom parameters, and RViz with a custom setup.
 
-![Evaluator Setup](evaluator_rqt.png)
-
-## 3. Running the Evaluator
-
-Standard Run (Default Settings):
-Use this if you are using the standard TurtleBot3 setup with no namespace.
 ```bash
-ros2 run evaluator_core evaluator_node
-```
-*Defaults: map_topic='/map', base_frame='base_link', map_frame='map'*
-
-Run the referee node. If you use custom topic names (e.g., a namespace), provide them as parameters:
-```bash
-ros2 run evaluator_core evaluator_node --ros-args -p map_topic:=/my_map -p base_frame:=base_footprint
+ros2 launch cleaner_bringup cleaner_sim.launch.py
 ```
 
-## 4. How to Use in Your Project Code
+Terminal 2 - Cleaning server, room navigation server, and evaluation node:
+Next we launch the server nodes for the clean_room action and the go_to_room action. We also launch the evaluator node here.
 
-During your presentation, your own nodes should call these services automatically:
+```bash
+ros2 launch cleaner_bringup cleaner_eval.launch.py 
+```
 
-### Start Evaluation
-Call the `/start_eval` service (type: `evaluator_interfaces/srv/StartCleaning`). Provide 4 points (x, y) in meters for your room corners. Once called, the map will 'carve out' only that room.
 
-### Stop Evaluation
-When your cleaning logic is complete, your node must call the `/stop_eval` service (type: `std_srvs/srv/Trigger`).
+## 3. Navigating to rooms
 
-## 5. Manual Testing (rqt)
+To send commands to navigate to rooms you must run the appropriate client node with an argument as follows:
 
-For debugging, you can use the **Service Caller** plugin in `rqt` to trigger `/start_eval` and `/stop_eval` manually. The final results will be printed in the node terminal and returned in the service response.
+```bash
+ros2 run go_to_room go_to_room_client <room_name>
+```
+*room_name options: [bedroom, library, living_room, hallway, kitchen, pantry, dining_room]*
+
+
+## 4. Cleaning rooms
+
+To start a room cleaning operation you must launch teh appropriate client node with a room name argument as follows:
+
+```bash
+ros2 run clean_room clean_room_client <room_name>
+```
+*room_name options: [bedroom, library, living_room, hallway, kitchen, pantry, dining_room]*
