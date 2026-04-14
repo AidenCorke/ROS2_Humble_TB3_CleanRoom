@@ -51,3 +51,6 @@ To start a room cleaning operation you must launch teh appropriate client node w
 ros2 run clean_room clean_room_client <room_name>
 ```
 *room_name options: [bedroom, library, living_room, hallway, kitchen, pantry, dining_room]*
+
+## Notes
+To change between the default and tuned Nav2 parameters the nav2_params.yaml file will need to be swapped. For simplicity a copy of each are provided in the cleaner_bringup/config/ folder.

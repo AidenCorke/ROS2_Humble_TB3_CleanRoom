@@ -36,7 +36,7 @@ def generate_launch_description():
                      output='screen',
                      )
     
-    # --- Clean Room Evaluator ---
+    # --- Go To Room Server ---
     go_to_room = Node(package='go_to_room',
                       executable='go_to_room_node',
                       name='go_to_room_node',
