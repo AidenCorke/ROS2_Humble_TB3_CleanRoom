@@ -19,7 +19,7 @@ This repository contains the full ROS2 package from **Group 1** for the MCG5138 
 ## 2. Launching the system
 
 Terminal 1 - Simulation Files:
-Using a single launch file we launch the TB3 house environment in gazebo, the Navigation2 stack with custom parameters, and RViz with a custom setup.
+Using a single launch file we launch the TB3 house environment in gazebo, the Navigation2 stack with custom parameters and a previously made map, and RViz with a custom setup. House map has been created using SLAM Toolbox with resulting map saved within the bringup package. It is automatically loaded during launch using these commands. 
 
 ```bash
 ros2 launch cleaner_bringup cleaner_sim.launch.py
@@ -31,6 +31,7 @@ Next we launch the server nodes for the clean_room action and the go_to_room act
 ```bash
 ros2 launch cleaner_bringup cleaner_eval.launch.py 
 ```
+Note you must source the local overlay for each terminal.
 
 
 ## 3. Navigating to rooms
