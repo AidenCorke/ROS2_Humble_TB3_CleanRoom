@@ -55,3 +55,5 @@ ros2 run clean_room clean_room_client <room_name>
 
 ## Notes
 To change between the default and tuned Nav2 parameters the nav2_params.yaml file will need to be swapped. For simplicity a copy of each are provided in the cleaner_bringup/config/ folder.
+
+The included MCG5138_Demo_Group1.webm file is the recorded demo video of the robot in action. It shows the launching of the files, room-to-room navigation, and cleaning. At the end a second cleaning command is given in a room where a dynamic obstacle was added, the video shows the canceling behaviour of the cleaning program in this part.

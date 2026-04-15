@@ -43,8 +43,8 @@ def generate_launch_description():
             'map_yaml_file': map_yaml,
             'use_sim_time': 'True',
             'params_file': nav2_params,
-            'default_nav_to_pose_bt_xml': NavToPose_params,
-            'default_nav_through_poses_bt_xml': NavToPose_params,
+            #'default_nav_to_pose_bt_xml': NavToPose_params,
+            #'default_nav_through_poses_bt_xml': NavToPose_params,
         }.items()
     )
 

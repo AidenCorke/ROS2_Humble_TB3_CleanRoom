@@ -60,5 +60,5 @@ room_name:
       - [46, 182]          # bottom-right
       - [0, 182]          # bottom-left
     entry_point: [22, 88] # Map coordinates
-    mesh_resolution: 8     # Pixels
-    inflation_radius: 3     # Pixels          
+    mesh_resolution: 7     # Pixels
+    inflation_radius: 2     # Pixels          
